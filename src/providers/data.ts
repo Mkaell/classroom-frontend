@@ -1,68 +1,52 @@
-import {
-	BaseRecord,
-	DataProvider,
-	GetListParams,
-	GetListResponse,
-} from "@refinedev/core";
+import { createDataProvider, CreateDataProviderOptions } from "@refinedev/rest";
 
-import { Subject } from "@/types";
+import { ListResponse } from "@/types";
+import { BACKEND_BASE_URL } from "@/constants";
 
-const MOCK_SUBJECTS: Subject[] = [
-	{
-		id: 1,
-		code: "CS501",
-		name: "Advanced Algorithms",
-		department: "Computer Science",
-		description:
-			"Deep dive into graph theory, dynamic programming, and distributed algorithms.",
-	},
-	{
-		id: 2,
-		code: "MAT320",
-		name: "Applied Linear Algebra",
-		department: "Mathematics",
-		description:
-			"Matrix factorization and vector spaces with practical data science applications.",
-	},
-	{
-		id: 3,
-		code: "PHY210",
-		name: "Modern Physics",
-		department: "Physics",
-		description:
-			"Covers relativity, quantum theory, and the experimental foundations of physics.",
-	},
-];
+if (!BACKEND_BASE_URL)
+	throw new Error(
+		"BACKEND_BASE_URL is not configured. Please set VITE_BACKEND_BASE_URL in your .env file.",
+	);
 
-export const dataProvider: DataProvider = {
-	getList: async <TData extends BaseRecord = BaseRecord>({
-		resource,
-	}: GetListParams): Promise<GetListResponse<TData>> => {
-		if (resource !== "subjects") {
-			return {
-				data: [] as TData[],
-				total: 0,
+const options: CreateDataProviderOptions = {
+	getList: {
+		getEndpoint: ({ resource }) => resource,
+
+		buildQueryParams: async ({ resource, pagination, filters }) => {
+			const page = pagination?.currentPage ?? 1;
+			const pageSize = pagination?.pageSize ?? 10;
+
+			const params: Record<string, string | number> = {
+				page,
+				limit: pageSize,
 			};
-		}
 
-		return {
-			data: MOCK_SUBJECTS as unknown as TData[],
-			total: MOCK_SUBJECTS.length,
-		};
+			filters?.forEach((filter) => {
+				const field = "field" in filter ? filter.field : "";
+				const value = String(filter.value);
+
+				if (resource === "subjects") {
+					if (field === "department") params.department = value;
+					if (field === "name" || field === "code")
+						params.search = value;
+				}
+			});
+
+			return params;
+		},
+
+		mapResponse: async (response) => {
+			const payload: ListResponse = await response.clone().json();
+			return payload.data ?? [];
+		},
+
+		getTotalCount: async (response) => {
+			const payload: ListResponse = await response.clone().json();
+			return payload.pagination?.total ?? payload.data?.length ?? 0;
+		},
 	},
-	getOne: async () => {
-		throw new Error("getOne is not implemented in the mock data provider");
-	},
-	create: async () => {
-		throw new Error("create is not implemented in the mock data provider");
-	},
-	update: async () => {
-		throw new Error("update is not implemented in the mock data provider");
-	},
-	deleteOne: async () => {
-		throw new Error(
-			"deleteOne is not implemented in the mock data provider",
-		);
-	},
-	getApiUrl: () => "",
 };
+
+const { dataProvider } = createDataProvider(BACKEND_BASE_URL, options);
+
+export { dataProvider };
